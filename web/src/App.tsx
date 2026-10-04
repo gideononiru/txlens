@@ -52,7 +52,7 @@ export default function App() {
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <img src="/favicon.svg" className="h-8 w-8" alt="" />
+          <img src={`${import.meta.env.BASE_URL}favicon.svg`} className="h-8 w-8" alt="" />
           <span className="font-mono text-lg font-bold text-phos">txlens</span>
         </div>
         <div className="flex rounded-lg border border-rim p-1 font-mono text-xs">
