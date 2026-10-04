@@ -88,6 +88,26 @@ npm test            # 18 tests, built from real transactions
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Web app
+
+![txlens web app](docs/assets/web-app.png)
+
+A transaction inspector at `web/`, running entirely in the browser:
+
+- **Paste an XDR** or **fetch by transaction hash** from Horizon (testnet or mainnet).
+- A **report**: findings sorted by severity (danger, warning, info) tied to the operation that caused them, every operation in plain English, and the transaction details (source, fee, sequence, memo, validity, signatures).
+- A **JSON** view of the full explanation.
+- **Samples** to try, including a typical "claim your airdrop" scam (new signer + account merge, never expires).
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5173
+```
+
+The app imports the library straight from `../src`, so the browser and the CLI
+share one implementation. `netlify.toml` at the repo root deploys it as-is.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
