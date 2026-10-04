@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --color-term: #0b0e0c;
+  --color-pane: #111612;
+  --color-rim: #223026;
+  --color-phos: #39ff88;
+  --color-phos-dim: #7fbf96;
+  --color-amber: #ffbf3c;
+  --color-blood: #ff5d5d;
+  --color-sky: #6cc5ff;
+  --color-chalk: #e7efe9;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+body { background: var(--color-term); color: var(--color-chalk); font-family: var(--font-sans); }
+
+@layer components {
+  .pane { background: var(--color-pane); border: 1px solid var(--color-rim); border-radius: 10px; }
+  .prompt { width: 100%; background: #070908; border: 1px solid var(--color-rim); border-radius: 8px; padding: .8rem; color: var(--color-phos); font-family: var(--font-mono); font-size: .8rem; }
+  .prompt:focus { outline: none; border-color: var(--color-phos); box-shadow: 0 0 0 3px rgb(57 255 136 / .12); }
+  .run { background: var(--color-phos); color: #04140a; font-weight: 700; border-radius: 8px; padding: .55rem 1.1rem; font-family: var(--font-mono); font-size: .85rem; }
+  .run:disabled { opacity: .5; }
+  .chipb { border: 1px solid var(--color-rim); border-radius: 999px; padding: .25rem .7rem; font-family: var(--font-mono); font-size: .72rem; color: var(--color-phos-dim); }
+  .chipb:hover { border-color: var(--color-phos); color: var(--color-phos); }
+}
