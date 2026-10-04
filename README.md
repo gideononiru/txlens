@@ -88,6 +88,12 @@ npm test            # 18 tests, built from real transactions
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Wallet integration](docs/wallet-integration.md)
+- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
+
 ## Glossary (new to Stellar?)
 
 - **XDR**: the binary format Stellar uses for transactions, usually shared
