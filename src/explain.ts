@@ -7,6 +7,7 @@ import {
   Operation,
   Transaction,
   TransactionBuilder,
+  scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
 
@@ -17,6 +18,8 @@ export interface Finding {
   /** Index of the operation this is about, or null for transaction-level findings. */
   operation: number | null;
   message: string;
+  /** For fee bumps: whether this is about the outer fee bump or the inner transaction. */
+  envelope?: "fee-bump" | "inner";
 }
 
 export interface Explanation {
@@ -97,6 +100,9 @@ export function explain(envelope: string, options: ExplainOptions = {}): Explana
     });
   }
 
+  // Everything found so far is about the fee-bump wrapper; the rest is about the inner tx.
+  const outerCount = findings.length;
+
   const now = options.now ?? Math.floor(Date.now() / 1000);
   const validity = describeTimeBounds(tx, now, findings);
 
@@ -112,6 +118,8 @@ export function explain(envelope: string, options: ExplainOptions = {}): Explana
     const actor = short(opSource ?? tx.source);
     return describe(op, actor, i, findings);
   });
+
+  if (feeBump) findings.forEach((f, i) => (f.envelope = i < outerCount ? "fee-bump" : "inner"));
 
   return {
     network: networkName(networkPassphrase),
@@ -289,17 +297,76 @@ function describeHostFunction(
       const call = func.invokeContract();
       const contract = Address.fromScAddress(call.contractAddress()).toString();
       const fn = call.functionName().toString();
+      const args = call.args().map(decodeArg);
       flag(
         "info",
         `Calls contract ${short(contract)}: its effects depend on that contract's code. Only sign for contracts you trust.`,
       );
-      return `${actor} calls ${fn}() on contract ${short(contract)} with ${call.args().length} argument(s)`;
+      return describeTokenCall(fn, args, contract, actor, flag) ?? `${actor} calls ${fn}(${args.map(showArg).join(", ")}) on contract ${short(contract)}`;
     }
     case xdr.HostFunctionType.hostFunctionTypeUploadContractWasm():
       return `${actor} uploads contract code (${func.wasm().length} bytes)`;
     default:
       return `${actor} deploys a new contract`;
   }
+}
+
+// Allowances at or above this many base units are treated as unlimited.
+const UNLIMITED = 2n ** 63n - 1n;
+
+function decodeArg(v: xdr.ScVal): unknown {
+  try {
+    return scValToNative(v);
+  } catch {
+    return `<${v.switch().name}>`;
+  }
+}
+
+/** Compact, human-readable rendering of a decoded contract argument. */
+export function showArg(v: unknown): string {
+  if (typeof v === "bigint" || typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "string") return /^[GCM][A-Z2-7]{55}$/.test(v) ? short(v) : JSON.stringify(v);
+  if (v === null || v === undefined) return "none";
+  if (v instanceof Uint8Array) {
+    const hex = Array.from(v, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `0x${hex.length > 16 ? `${hex.slice(0, 8)}…${hex.slice(-8)}` : hex}`;
+  }
+  if (Array.isArray(v)) return `[${v.map(showArg).join(", ")}]`;
+  if (typeof v === "object") {
+    return `{${Object.entries(v as Record<string, unknown>)
+      .map(([k, x]) => `${k}: ${showArg(x)}`)
+      .join(", ")}}`;
+  }
+  return String(v);
+}
+
+/** Plain-English descriptions for the SEP-41 token functions people sign most. */
+function describeTokenCall(
+  fn: string,
+  args: unknown[],
+  contract: string,
+  actor: string,
+  flag: (s: Severity, m: string) => void,
+): string | null {
+  const amount = (v: unknown) => (typeof v === "bigint" ? v : null);
+  const token = `token ${short(contract)}`;
+  if (fn === "transfer" && args.length === 3 && amount(args[2]) !== null) {
+    return `${actor} transfers ${args[2]} base units of ${token} from ${showArg(args[0])} to ${showArg(args[1])}`;
+  }
+  if (fn === "approve" && args.length === 4 && amount(args[2]) !== null) {
+    const value = amount(args[2])!;
+    if (value >= UNLIMITED) {
+      flag(
+        "warning",
+        `Gives ${showArg(args[1])} an effectively unlimited allowance on ${token}. It can move all of ${showArg(args[0])}'s balance of this token until ledger ${args[3]}.`,
+      );
+    }
+    return `${actor} lets ${showArg(args[1])} spend up to ${value} base units of ${showArg(args[0])}'s ${token} until ledger ${args[3]}`;
+  }
+  if (fn === "burn" && args.length === 2 && amount(args[1]) !== null) {
+    return `${actor} burns ${args[1]} base units of ${token} from ${showArg(args[0])}`;
+  }
+  return null;
 }
 
 /** Render an explanation as human-readable text. */
@@ -319,7 +386,8 @@ export function formatExplanation(e: Explanation): string {
   ];
   if (e.findings.length) {
     lines.push("", "Review:");
-    for (const f of e.findings) lines.push(`  ${icon[f.severity]} ${f.message}`);
+    const where = (f: Finding) => (f.envelope === "fee-bump" ? "[fee bump] " : f.envelope === "inner" ? "[inner tx] " : "");
+    for (const f of e.findings) lines.push(`  ${icon[f.severity]} ${where(f)}${f.message}`);
   }
   return lines.join("\n");
 }
