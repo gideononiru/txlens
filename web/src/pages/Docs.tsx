@@ -1,4 +1,5 @@
-import { Link, useTitle } from "../lib/router";
+import { useEffect } from "react";
+import { Link, useSection, useTitle } from "../lib/router";
 
 const SECTIONS = [
   ["start", "Getting started"],
@@ -9,23 +10,19 @@ const SECTIONS = [
 
 export function Docs() {
   useTitle("Docs · txlens");
+  const section = useSection();
+  useEffect(() => {
+    if (section) document.getElementById(section)?.scrollIntoView({ behavior: "smooth" });
+  }, [section]);
   return (
     <div className="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[210px_1fr]">
       <aside className="hidden lg:block">
         <nav className="sticky top-24 space-y-1 text-sm">
           <p className="mb-3 px-3 font-mono text-xs uppercase tracking-[0.2em] text-phos">On this page</p>
           {SECTIONS.map(([id, label]) => (
-            <a
-              key={id}
-              href="#/docs"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="block rounded-lg px-3 py-2 text-phos-dim hover:text-phos"
-            >
+            <Link key={id} to={`/docs/${id}`} className="block rounded-lg px-3 py-2 text-phos-dim hover:text-phos">
               {label}
-            </a>
+            </Link>
           ))}
         </nav>
       </aside>
@@ -65,10 +62,15 @@ export function Docs() {
         <section id="reference" className="scroll-mt-24 space-y-5">
           <h2 className="text-3xl font-bold tracking-tight text-chalk">Library & CLI</h2>
           <p className="text-phos-dim">Use the CLI in scripts and CI, or the library in your own app:</p>
-          <pre className="overflow-x-auto p-5 font-mono text-xs leading-relaxed pane text-phos">{`npx txlens <base64-xdr>                    # mainnet passphrase by default
-npx txlens <base64-xdr> --testnet
-npx txlens <base64-xdr> --network "My Network ; 2026"
-echo <base64-xdr> | npx txlens --json      # machine-readable
+          <pre className="overflow-x-auto p-5 font-mono text-xs leading-relaxed pane text-phos">{`# not published to npm yet: install from source
+git clone https://github.com/gideononiru/txlens && cd txlens
+npm install && npm run build && npm link   # puts \`txlens\` on your PATH
+
+txlens <base64-xdr>                    # mainnet passphrase by default
+txlens <base64-xdr> --testnet
+txlens <base64-xdr> --network "My Network ; 2026"
+echo <base64-xdr> | txlens --json      # machine-readable
+txlens --file tx.xdr --testnet         # long envelopes: read from a file ("-" = stdin)
 
 # exit codes: 0 ok · 1 invalid input · 2 contains a danger finding`}</pre>
           <div className="pane overflow-x-auto">

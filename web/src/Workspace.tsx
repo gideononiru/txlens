@@ -1,13 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Networks } from "@stellar/stellar-sdk";
 import { explain, riskLevel, type Explanation, type Severity } from "../../src/explain";
 import { SAMPLES } from "./samples";
+import { routeParams } from "./lib/router";
 
 const NETWORKS = {
   testnet: { label: "Testnet", passphrase: Networks.TESTNET, horizon: "https://horizon-testnet.stellar.org" },
   public: { label: "Mainnet", passphrase: Networks.PUBLIC, horizon: "https://horizon.stellar.org" },
+  futurenet: { label: "Futurenet", passphrase: Networks.FUTURENET, horizon: "https://horizon-futurenet.stellar.org" },
+  custom: { label: "Custom", passphrase: "", horizon: "" },
 } as const;
 type Net = keyof typeof NETWORKS;
+const isNet = (v: string | null): v is Net => !!v && v in NETWORKS;
 
 const SEV: Record<Severity, { icon: string; cls: string }> = {
   danger: { icon: "⛔", cls: "border-blood/50 bg-blood/10 text-blood" },
@@ -16,9 +20,16 @@ const SEV: Record<Severity, { icon: string; cls: string }> = {
 };
 
 export function Workspace() {
-  const [net, setNet] = useState<Net>("testnet");
-  const [input, setInput] = useState(SAMPLES[0].xdr);
-  const [hash, setHash] = useState("");
+  // A shared link (#/app?net=…&xdr=… or &hash=…) opens straight onto that report.
+  const [linked] = useState(() => routeParams());
+  const [net, setNet] = useState<Net>(() => (isNet(linked.get("net")) ? (linked.get("net") as Net) : "testnet"));
+  const [customPass, setCustomPass] = useState(linked.get("passphrase") ?? "");
+  const [customHorizon, setCustomHorizon] = useState(linked.get("horizon") ?? "");
+  const [input, setInput] = useState(linked.get("xdr") ?? SAMPLES[0].xdr);
+  const [hash, setHash] = useState(linked.get("hash") ?? "");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const network =
+    net === "custom" ? { label: "Custom", passphrase: customPass.trim(), horizon: customHorizon.trim().replace(/\/$/, "") } : NETWORKS[net];
   const [fetching, setFetching] = useState(false);
   const [fetchErr, setFetchErr] = useState<string | null>(null);
   const [view, setView] = useState<"report" | "json">("report");
@@ -26,18 +37,20 @@ export function Workspace() {
   const result = useMemo((): { e?: Explanation; error?: string } => {
     if (!input.trim()) return {};
     try {
-      return { e: explain(input.trim(), { networkPassphrase: NETWORKS[net].passphrase }) };
+      if (!network.passphrase) return { error: "Enter the custom network's passphrase." };
+      return { e: explain(input.trim(), { networkPassphrase: network.passphrase }) };
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     }
-  }, [input, net]);
+  }, [input, network.passphrase]);
 
   async function fetchByHash() {
     setFetching(true);
     setFetchErr(null);
     try {
-      const res = await fetch(`${NETWORKS[net].horizon}/transactions/${hash.trim()}`);
-      if (!res.ok) throw new Error(res.status === 404 ? `Not found on ${NETWORKS[net].label}.` : `Horizon returned ${res.status}.`);
+      if (!network.horizon) throw new Error("Enter the custom network's Horizon URL.");
+      const res = await fetch(`${network.horizon}/transactions/${hash.trim()}`);
+      if (!res.ok) throw new Error(res.status === 404 ? `Not found on ${network.label}.` : `Horizon returned ${res.status}.`);
       setInput(((await res.json()) as { envelope_xdr: string }).envelope_xdr);
     } catch (e) {
       setFetchErr(e instanceof Error ? e.message : String(e));
@@ -45,6 +58,26 @@ export function Workspace() {
       setFetching(false);
     }
   }
+
+  // A shared hash link fetches its transaction once on load.
+  useEffect(() => {
+    if (linked.get("hash") && !linked.get("xdr")) fetchByHash();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const shareLink = () => {
+    const p = new URLSearchParams({ net });
+    if (net === "custom") {
+      p.set("passphrase", customPass);
+      p.set("horizon", customHorizon);
+    }
+    p.set("xdr", input.trim());
+    const url = `${window.location.origin}${window.location.pathname}#/app?${p.toString()}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    });
+  };
 
   const risk = result.e ? riskLevel(result.e) : null;
 
@@ -58,6 +91,11 @@ export function Workspace() {
             </button>
           ))}
         </div>
+        {result.e && (
+          <button className="chipb" onClick={shareLink}>
+            {linkCopied ? "link copied ✓" : "copy link to this report"}
+          </button>
+        )}
       </header>
 
       <section className="mx-auto max-w-6xl px-5 pb-6 pt-4">
@@ -70,8 +108,15 @@ export function Workspace() {
         </p>
       </section>
 
-      <main className="mx-auto grid max-w-6xl gap-5 px-5 pb-16 lg:grid-cols-[1fr_1.1fr]">
+      <div className="mx-auto grid max-w-6xl gap-5 px-5 pb-16 lg:grid-cols-[1fr_1.1fr]">
         <section className="space-y-4">
+          {net === "custom" && (
+            <div className="pane space-y-2 p-4">
+              <p className="font-mono text-xs text-phos-dim">$ custom network</p>
+              <input className="prompt" placeholder="network passphrase" value={customPass} onChange={(e) => setCustomPass(e.target.value)} />
+              <input className="prompt" placeholder="Horizon URL (only needed to fetch by hash)" value={customHorizon} onChange={(e) => setCustomHorizon(e.target.value)} />
+            </div>
+          )}
           <div className="pane p-4">
             <p className="mb-2 font-mono text-xs text-phos-dim">$ paste envelope XDR</p>
             <textarea className="prompt h-48 break-all" value={input} onChange={(e) => setInput(e.target.value)} spellCheck={false} />
@@ -121,7 +166,7 @@ export function Workspace() {
             {result.e && view === "report" && <Report e={result.e} />}
           </div>
         </section>
-      </main>
+      </div>
     </div>
   );
 }
@@ -138,6 +183,7 @@ function Report({ e }: { e: Explanation }) {
               <p key={i} className={`rounded-lg border px-3 py-2 text-sm ${SEV[f.severity].cls}`}>
                 <span className="mr-2">{SEV[f.severity].icon}</span>
                 {f.operation !== null && <span className="mr-1 font-mono text-xs opacity-70">op {f.operation + 1}:</span>}
+                {f.envelope === "fee-bump" ? "[fee bump] " : f.envelope === "inner" ? "[inner tx] " : ""}
                 {f.message}
               </p>
             ))}
