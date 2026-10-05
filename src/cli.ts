@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { Networks } from "@stellar/stellar-sdk";
 import { explain, formatExplanation, riskLevel } from "./explain.js";
@@ -6,6 +7,7 @@ const HELP = `txlens — explain a Stellar transaction before you sign it
 
 Usage:
   txlens <base64-xdr> [--testnet | --network "<passphrase>"] [--json]
+  txlens --file tx.xdr [--testnet]     read the envelope from a file ("-" = stdin)
   echo <base64-xdr> | txlens [--testnet]
 
 Exit codes: 0 ok, 1 invalid input, 2 contains a "danger" finding.`;
@@ -21,6 +23,7 @@ export async function run(
       testnet: { type: "boolean", default: false },
       network: { type: "string" },
       json: { type: "boolean", default: false },
+      file: { type: "string", short: "f" },
       help: { type: "boolean", short: "h", default: false },
     },
     allowPositionals: true,
@@ -30,7 +33,18 @@ export async function run(
     return 0;
   }
 
-  const input = positionals[0] ?? (await readStdin()).trim();
+  let input: string;
+  try {
+    input =
+      values.file === "-"
+        ? (await readStdin()).trim()
+        : values.file
+          ? readFileSync(values.file, "utf8").trim()
+          : (positionals[0] ?? (await readStdin())).trim();
+  } catch (err) {
+    out(`error: can't read ${values.file}: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
   if (!input) {
     out(HELP);
     return 1;

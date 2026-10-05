@@ -18,6 +18,18 @@ async function cli(args: string[], stdin = "") {
 }
 
 describe("cli", () => {
+  it("reads the envelope from --file", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const path = join(mkdtempSync(join(tmpdir(), "txlens-")), "tx.xdr");
+    writeFileSync(path, merge() + "\n");
+    const { code, output } = await cli(["--file", path, "--testnet"]);
+    expect(code).toBe(2);
+    expect(output).toContain("Merges the account");
+    expect((await cli(["--file", path + ".missing"])).code).toBe(1);
+  });
+
   it("exits 2 for dangerous transactions", async () => {
     const { code, output } = await cli([merge(), "--testnet"]);
     expect(code).toBe(2);

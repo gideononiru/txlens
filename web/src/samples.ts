@@ -1,4 +1,4 @@
-import { Account, Asset, Contract, Keypair, Memo, Networks, Operation, TransactionBuilder, nativeToScVal } from "@stellar/stellar-sdk";
+import { Account, Asset, Contract, Keypair, Memo, Networks, Operation, Transaction, TransactionBuilder, nativeToScVal } from "@stellar/stellar-sdk";
 
 const victim = Keypair.random().publicKey();
 const attacker = Keypair.random().publicKey();
@@ -41,6 +41,24 @@ export const SAMPLES: { name: string; xdr: string }[] = [
         nativeToScVal(shop, { type: "address" }),
         nativeToScVal(10_000_000n, { type: "i128" }),
       ) as unknown as ReturnType<typeof Operation.payment>,
+    ]),
+  },
+  {
+    name: "💸 Fee-bumped payment",
+    xdr: TransactionBuilder.buildFeeBumpTransaction(
+      Keypair.random().publicKey(),
+      "200",
+      TransactionBuilder.fromXDR(
+        tx([Operation.payment({ destination: shop, asset: Asset.native(), amount: "12" })]),
+        Networks.TESTNET,
+      ) as Transaction,
+      Networks.TESTNET,
+    ).toXDR(),
+  },
+  {
+    name: "🪝 Issuer claws back USDC",
+    xdr: tx([
+      Operation.clawback({ asset: new Asset("USDC", usdcIssuer), from: victim, amount: "250", source: usdcIssuer }) as ReturnType<typeof Operation.payment>,
     ]),
   },
   {

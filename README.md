@@ -55,11 +55,18 @@ deploys, TTL extensions and restores. Fee-bump envelopes are unwrapped.
 
 ## CLI
 
+> **Heads-up:** the npm name `txlens` belongs to an unrelated project (a Solana transaction CLI by another author). Don't run `npx txlens`; install from source as below. This package will be published as `@gideononiru/txlens`.
+
 ```bash
-npx txlens <base64-xdr>                    # mainnet passphrase by default
-npx txlens <base64-xdr> --testnet
-npx txlens <base64-xdr> --network "My Network ; 2026"
-echo <base64-xdr> | npx txlens --json      # machine-readable
+# not published to npm yet: install from source
+git clone https://github.com/gideononiru/txlens && cd txlens
+npm install && npm run build && npm link   # puts `txlens` on your PATH
+
+txlens <base64-xdr>                    # mainnet passphrase by default
+txlens <base64-xdr> --testnet
+txlens <base64-xdr> --network "My Network ; 2026"
+echo <base64-xdr> | txlens --json      # machine-readable
+txlens --file tx.xdr --testnet         # long envelopes: read from a file ("-" = stdin)
 ```
 
 Exit codes: `0` ok, `1` invalid input, `2` the transaction contains a
@@ -91,6 +98,10 @@ npm run lint && npm run typecheck && npm run build
 ## Web app
 
 ![txlens web app](docs/assets/web-app.png)
+
+The site has three pages: **Home** (what it does, with live testnet data), **App** (the tool itself) and **Docs** (getting started, concepts, reference and FAQ).
+
+![txlens app page](docs/assets/web-app-page.png)
 
 A transaction inspector at `web/`, running entirely in the browser:
 

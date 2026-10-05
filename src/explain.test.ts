@@ -104,8 +104,40 @@ describe("explain", () => {
   it("explains a contract call and notes it can't be verified", () => {
     const contract = new Contract("CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE");
     const e = run(build([contract.call("transfer", nativeToScVal(1), nativeToScVal(2)) as never]));
-    expect(e.operations[0]).toMatch(/calls transfer\(\) on contract CA3D…GAXE with 2 argument/);
+    expect(e.operations[0]).toMatch(/calls transfer\(1, 2\) on contract CA3D…GAXE/);
     expect(e.findings.some((f) => f.severity === "info" && /trust/.test(f.message))).toBe(true);
+  });
+
+  it("describes SEP-41 token transfers in plain English", () => {
+    const token = new Contract("CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE");
+    const call = token.call(
+      "transfer",
+      nativeToScVal(me.publicKey(), { type: "address" }),
+      nativeToScVal(other, { type: "address" }),
+      nativeToScVal(25_000_000n, { type: "i128" }),
+    );
+    const e = run(build([call as never]));
+    expect(e.operations[0]).toMatch(/transfers 25000000 base units of token CA3D…GAXE from .+ to .+/);
+  });
+
+  it("warns about effectively unlimited approvals", () => {
+    const token = new Contract("CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE");
+    const approve = (amount: bigint) =>
+      run(
+        build([
+          token.call(
+            "approve",
+            nativeToScVal(me.publicKey(), { type: "address" }),
+            nativeToScVal(other, { type: "address" }),
+            nativeToScVal(amount, { type: "i128" }),
+            nativeToScVal(500_000, { type: "u32" }),
+          ) as never,
+        ]),
+      );
+    const huge = approve(2n ** 100n);
+    expect(huge.operations[0]).toMatch(/lets .+ spend up to .+ until ledger 500000/);
+    expect(huge.findings.some((f) => f.severity === "warning" && /unlimited allowance/.test(f.message))).toBe(true);
+    expect(approve(100n).findings.some((f) => /unlimited/.test(f.message))).toBe(false);
   });
 
   it("unwraps fee-bump transactions", () => {
@@ -119,6 +151,9 @@ describe("explain", () => {
     expect(e.feeBump?.feeSource).toBe(sponsor.publicKey());
     expect(e.operations).toHaveLength(1);
     expect(e.findings.some((f) => /fee bump/.test(f.message))).toBe(true);
+    expect(e.findings.find((f) => /fee bump/.test(f.message))?.envelope).toBe("fee-bump");
+    expect(e.findings.filter((f) => f.envelope === "inner").every((f) => !/fee bump/.test(f.message))).toBe(true);
+    expect(formatExplanation(e)).toContain("[fee bump] Fees are paid by");
   });
 
   it("rejects garbage", () => {
